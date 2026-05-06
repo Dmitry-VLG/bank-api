@@ -1,0 +1,21 @@
+# Environment
+.env
+
+# Binaries
+*.exe
+*.out
+*.test
+
+# Go
+bin/
+vendor/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker/Postgres local data
+*.log

@@ -27,7 +27,7 @@ func NewRouter(h *Handler, tokens security.TokenManager) http.Handler {
 
 	auth.HandleFunc("/cards", h.CreateCard).Methods(http.MethodPost)
 	auth.HandleFunc("/cards", h.Cards).Methods(http.MethodGet)
-
+	auth.HandleFunc("/cards/{cardId:[0-9]+}/pay", h.CardPayment).Methods(http.MethodPost)
 	auth.HandleFunc("/credits", h.CreateCredit).Methods(http.MethodPost)
 	auth.HandleFunc("/credits/{creditId:[0-9]+}/schedule", h.CreditSchedule).Methods(http.MethodGet)
 

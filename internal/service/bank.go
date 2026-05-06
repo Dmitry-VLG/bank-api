@@ -37,6 +37,10 @@ type CreateCreditInput struct {
 	Amount     float64 `json:"amount"`
 	TermMonths int     `json:"term_months"`
 }
+type CardPaymentInput struct {
+	CardID int64   `json:"card_id"`
+	Amount float64 `json:"amount"`
+}
 
 func NewBankService(store *repository.Store, cbr *CBRClient, email *EmailSender, hmacSecret string) *BankService {
 	return &BankService{
@@ -62,7 +66,13 @@ func (s *BankService) Deposit(ctx context.Context, userID, accountID int64, amou
 	}
 
 	a, err := s.store.Deposit(ctx, userID, accountID, cents)
-	return a, mapRepoErr(err)
+	if err != nil {
+		return model.Account{}, mapRepoErr(err)
+	}
+
+	s.notifyPayment(ctx, userID, cents)
+
+	return a, nil
 }
 
 func (s *BankService) Withdraw(ctx context.Context, userID, accountID int64, amount float64) (model.Account, error) {
@@ -72,7 +82,13 @@ func (s *BankService) Withdraw(ctx context.Context, userID, accountID int64, amo
 	}
 
 	a, err := s.store.Withdraw(ctx, userID, accountID, cents)
-	return a, mapRepoErr(err)
+	if err != nil {
+		return model.Account{}, mapRepoErr(err)
+	}
+
+	s.notifyPayment(ctx, userID, cents)
+
+	return a, nil
 }
 
 func (s *BankService) Transfer(ctx context.Context, userID int64, in TransferInput) error {
@@ -85,7 +101,13 @@ func (s *BankService) Transfer(ctx context.Context, userID int64, in TransferInp
 		return ErrInvalidInput
 	}
 
-	return mapRepoErr(s.store.Transfer(ctx, userID, in.FromAccountID, in.ToAccountID, cents))
+	if err := s.store.Transfer(ctx, userID, in.FromAccountID, in.ToAccountID, cents); err != nil {
+		return mapRepoErr(err)
+	}
+
+	s.notifyPayment(ctx, userID, cents)
+
+	return nil
 }
 
 func (s *BankService) CreateCard(ctx context.Context, userID int64, in CreateCardInput) (model.Card, error) {
@@ -110,7 +132,19 @@ func (s *BankService) CreateCard(ctx context.Context, userID int64, in CreateCar
 }
 
 func (s *BankService) Cards(ctx context.Context, userID int64) ([]model.Card, error) {
-	return s.store.CardsByUser(ctx, userID)
+	cards, err := s.store.CardsByUser(ctx, userID)
+	if err != nil {
+		return nil, mapRepoErr(err)
+	}
+
+	for _, c := range cards {
+		payload := c.Number + "|" + c.Expiry + "|" + c.Last4
+		if !security.VerifyHMAC(payload, c.DataHMAC, s.hmacSecret) {
+			return nil, ErrDataIntegrity
+		}
+	}
+
+	return cards, nil
 }
 
 func (s *BankService) CreateCredit(ctx context.Context, userID int64, in CreateCreditInput) (model.Credit, error) {
@@ -181,6 +215,49 @@ func (s *BankService) PredictBalance(ctx context.Context, userID, accountID int6
 
 func (s *BankService) ProcessDuePayments(ctx context.Context) (int, error) {
 	return s.store.ProcessDuePayments(ctx)
+}
+
+func (s *BankService) CardPayment(ctx context.Context, userID int64, in CardPaymentInput) (model.Account, error) {
+	if in.CardID <= 0 {
+		return model.Account{}, ErrInvalidInput
+	}
+
+	cents, err := validAmount(in.Amount)
+	if err != nil {
+		return model.Account{}, err
+	}
+
+	card, err := s.store.CardByIDForUser(ctx, userID, in.CardID)
+	if err != nil {
+		return model.Account{}, mapRepoErr(err)
+	}
+
+	payload := card.Number + "|" + card.Expiry + "|" + card.Last4
+	if !security.VerifyHMAC(payload, card.DataHMAC, s.hmacSecret) {
+		return model.Account{}, ErrDataIntegrity
+	}
+
+	account, err := s.store.CardPayment(ctx, userID, in.CardID, cents)
+	if err != nil {
+		return model.Account{}, mapRepoErr(err)
+	}
+
+	s.notifyPayment(ctx, userID, cents)
+
+	return account, nil
+}
+
+func (s *BankService) notifyPayment(ctx context.Context, userID int64, amountCents int64) {
+	if s.email == nil {
+		return
+	}
+
+	email, err := s.store.UserEmailByID(ctx, userID)
+	if err != nil {
+		return
+	}
+
+	_ = s.email.SendPaymentEmail(email, model.FromCents(amountCents))
 }
 
 func annuityPayment(principalCents int64, annualRate float64, months int) int64 {

@@ -294,7 +294,7 @@ func (s *Store) CardsByUser(ctx context.Context, userID int64) ([]model.Card, er
 		SELECT id, user_id, account_id,
 		       pgp_sym_decrypt(number_encrypted, $2),
 		       pgp_sym_decrypt(expiry_encrypted, $2),
-		       last4, created_at
+		       data_hmac, last4, created_at
 		FROM cards
 		WHERE user_id = $1
 		ORDER BY id
@@ -315,6 +315,7 @@ func (s *Store) CardsByUser(ctx context.Context, userID int64) ([]model.Card, er
 			&c.AccountID,
 			&c.Number,
 			&c.Expiry,
+			&c.DataHMAC,
 			&c.Last4,
 			&c.CreatedAt,
 		); err != nil {
@@ -325,6 +326,96 @@ func (s *Store) CardsByUser(ctx context.Context, userID int64) ([]model.Card, er
 	}
 
 	return items, rows.Err()
+}
+func (s *Store) CardByIDForUser(ctx context.Context, userID, cardID int64) (model.Card, error) {
+	var c model.Card
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, user_id, account_id,
+		       pgp_sym_decrypt(number_encrypted, $3),
+		       pgp_sym_decrypt(expiry_encrypted, $3),
+		       data_hmac, last4, created_at
+		FROM cards
+		WHERE id = $1 AND user_id = $2
+	`, cardID, userID, s.cardPGPKey).Scan(
+		&c.ID,
+		&c.UserID,
+		&c.AccountID,
+		&c.Number,
+		&c.Expiry,
+		&c.DataHMAC,
+		&c.Last4,
+		&c.CreatedAt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Card{}, ErrForbidden
+	}
+
+	return c, err
+}
+
+func (s *Store) CardPayment(ctx context.Context, userID, cardID, amountCents int64) (model.Account, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return model.Account{}, err
+	}
+	defer rollback(tx)
+
+	var a model.Account
+
+	err = tx.QueryRowContext(ctx, `
+		SELECT a.id, a.user_id, a.currency, a.balance_cents, a.created_at
+		FROM cards c
+		JOIN accounts a ON a.id = c.account_id
+		WHERE c.id = $1 AND c.user_id = $2
+		FOR UPDATE OF a
+	`, cardID, userID).Scan(
+		&a.ID,
+		&a.UserID,
+		&a.Currency,
+		&a.BalanceCents,
+		&a.CreatedAt,
+	)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return model.Account{}, ErrForbidden
+	}
+	if err != nil {
+		return model.Account{}, err
+	}
+
+	if a.BalanceCents < amountCents {
+		return model.Account{}, ErrInsufficientFunds
+	}
+
+	a.BalanceCents -= amountCents
+
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE accounts
+		SET balance_cents = $1
+		WHERE id = $2
+	`, a.BalanceCents, a.ID); err != nil {
+		return model.Account{}, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO transactions(user_id, from_account_id, type, amount_cents)
+		VALUES($1, $2, 'card_payment', $3)
+	`, userID, a.ID, amountCents); err != nil {
+		return model.Account{}, err
+	}
+
+	return model.HydrateAccount(a), tx.Commit()
+}
+
+func (s *Store) UserEmailByID(ctx context.Context, userID int64) (string, error) {
+	var email string
+	err := s.db.QueryRowContext(ctx, `SELECT email FROM users WHERE id = $1`, userID).Scan(&email)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return email, err
 }
 
 func (s *Store) CreateCreditWithSchedule(

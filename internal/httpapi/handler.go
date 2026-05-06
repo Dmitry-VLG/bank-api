@@ -236,6 +236,34 @@ func (h *Handler) PredictBalance(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, p)
 }
+func (h *Handler) CardPayment(w http.ResponseWriter, r *http.Request) {
+	userID, ok := requireUser(w, r)
+	if !ok {
+		return
+	}
+
+	cardID, err := pathInt64(r, "cardId")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+
+	var in service.CardPaymentInput
+
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+
+	in.CardID = cardID
+
+	account, err := h.bank.CardPayment(r.Context(), userID, in)
+	if err != nil {
+		writeServiceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, account)
+}
 
 func (h *Handler) amountOperation(
 	w http.ResponseWriter,
@@ -310,7 +338,10 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, service.ErrInsufficientFunds):
 		writeError(w, http.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, service.ErrDataIntegrity):
+		writeError(w, http.StatusInternalServerError, err.Error())
 	default:
+		writeError(w, http.StatusInternalServerError, "internal error")
 		writeError(w, http.StatusInternalServerError, "internal error")
 	}
 }

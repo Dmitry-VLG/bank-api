@@ -9,4 +9,5 @@ var (
 	ErrForbidden          = errors.New("forbidden")
 	ErrConflict           = errors.New("conflict")
 	ErrInsufficientFunds  = errors.New("insufficient funds")
+	ErrDataIntegrity      = errors.New("card data integrity check failed")
 )

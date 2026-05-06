@@ -35,6 +35,7 @@ type Card struct {
 	AccountID int64     `json:"account_id"`
 	Number    string    `json:"number,omitempty"`
 	Expiry    string    `json:"expiry,omitempty"`
+	DataHMAC  string    `json:"-"`
 	Last4     string    `json:"last4"`
 	CreatedAt time.Time `json:"created_at"`
 }

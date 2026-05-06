@@ -2,7 +2,7 @@
 
 REST API банковского сервиса на Go.
 
-Проект реализован по техническому заданию: регистрация и аутентификация пользователей, JWT, банковские счета, карты, переводы, кредиты, аналитика, прогноз баланса, интеграция с ЦБ РФ, SMTP-уведомления, шифрование и хеширование чувствительных данных. 
+Проект реализован по техническому заданию: регистрация и аутентификация пользователей, JWT, банковские счета, карты, переводы, кредиты, аналитика, прогноз баланса, интеграция с ЦБ РФ, SMTP-уведомления, шифрование и хеширование чувствительных данных.
 
 ---
 
@@ -57,6 +57,7 @@ REST API банковского сервиса на Go.
 
 ## Структура проекта
 
+```text
 bank-api/
 ├── cmd/
 │   └── api/
@@ -101,6 +102,7 @@ bank-api/
 ├── go.sum
 ├── Makefile
 └── README.md
+```
 
 ---
 
@@ -108,6 +110,7 @@ bank-api/
 
 Пример файла .env.example:
 
+```env
 APP_PORT=8080
 DATABASE_URL=postgres://bank:bank@127.0.0.1:5433/bank?sslmode=disable
 
@@ -125,6 +128,7 @@ SMTP_PASS=
 SMTP_FROM=noreply@bank.local
 
 CBR_MARGIN_PERCENT=5
+```
 
 ---
 
@@ -151,7 +155,7 @@ services:
 
 volumes:
   bank_pg_data:
-
+```
 
 Причина использования порта `5433`: на локальной машине порт `5432` может быть занят другим PostgreSQL.
 
@@ -161,85 +165,85 @@ volumes:
 
 ### 1. Запустить PostgreSQL
 
-  powershell
+```powershell
 docker compose up -d
-
+```
 
 Проверка контейнера:
 
-   powershell
+```powershell
 docker ps
-
+```
 
 Ожидаемый порт:
 
-   text
+```text
 0.0.0.0:5433->5432/tcp
-
+```
 
 Проверка подключения к PostgreSQL:
 
-   powershell
+```powershell
 docker exec -e PGPASSWORD=bank -it bank-postgres psql -h 127.0.0.1 -U bank -d bank -c "select current_user;"
-
+```
 
 Ожидаемый результат:
 
-   text
+```text
  current_user
 --------------
  bank
-
+```
 
 ---
 
 ### 2. Установить зависимости
 
-   powershell
+```powershell
 go mod tidy
-
+```
 
 ---
 
 ### 3. Запустить API
 
-   powershell
+```powershell
 go run ./cmd/api
-
+```
 
 Успешный запуск:
 
-   json
+```json
 {"addr":":8080","level":"info","msg":"http server started"}
-
+```
 
 Также запускается шедулер платежей:
 
-   json
+```json
 {"level":"info","msg":"scheduled payments processed","processed":0}
-
+```
 
 ---
 
 ## Эндпоинты
 
 ### Публичные
-```
+
 | Метод | URL | Назначение |
-|      |      |            |
+|---|---|---|
 | POST | `/register` | регистрация пользователя |
 | POST | `/login` | аутентификация пользователя |
-```
+
 ### Защищённые
 
 Для защищённых эндпоинтов нужен заголовок:
 
-   http
+```http
 Authorization: Bearer <JWT_TOKEN>
 ```
 
 | Метод | URL | Назначение |
-|       |     |            |
+|---|---|---|
 | POST | `/accounts` | создать счёт |
 | GET | `/accounts` | получить счета пользователя |
 | POST | `/accounts/{accountId}/deposit` | пополнить счёт |
@@ -263,16 +267,16 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### 1. Проверка, что сервер слушает порт 8080
 
-   powershell
+```powershell
 netstat -ano | findstr :8080
-
+```
 
 Результат:
 
-   text
+```text
 TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING
 TCP    [::]:8080       [::]:0       LISTENING
-
+```
 
 ---
 
@@ -282,11 +286,11 @@ PowerShell иногда искажает JSON при использовании 
 
 ```powershell
 curl.exe --% -X POST http://localhost:8080/register -H "Content-Type: application/json" -d "{\"email\":\"user@example.com\",\"username\":\"user1\",\"password\":\"StrongPass123\"}"
-
+```
 
 Результат:
 
-  json
+```json
 {
   "user": {
     "id": 1,
@@ -296,7 +300,7 @@ curl.exe --% -X POST http://localhost:8080/register -H "Content-Type: applicatio
   },
   "token": "JWT_TOKEN"
 }
-
+```
 
 После регистрации был получен JWT-токен.
 
@@ -304,7 +308,7 @@ curl.exe --% -X POST http://localhost:8080/register -H "Content-Type: applicatio
 
 ### 3. Сохранение JWT в переменную PowerShell
 
-   powershell
+```powershell
 $token = "JWT_TOKEN"
 ```
 
@@ -312,67 +316,67 @@ $token = "JWT_TOKEN"
 
 ### 4. Создание счёта
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method POST `
   -Uri "http://localhost:8080/accounts" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 id            : 1
 user_id       : 1
 currency      : RUB
 balance_cents : 0
 balance       : 0
-
+```
 
 ---
 
 ### 5. Пополнение счёта
 
-  powershell
+```powershell
 curl.exe --% -X POST http://localhost:8080/accounts/1/deposit -H "Authorization: Bearer JWT_TOKEN" -H "Content-Type: application/json" -d "{\"amount\":10000}"
-
+```
 
 Результат:
 
-   text
+```text
 id            : 1
 user_id       : 1
 currency      : RUB
 balance_cents : 1000000
 balance       : 10000
-
+```
 
 ---
 
 ### 6. Просмотр счетов
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/accounts" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 id            : 1
 user_id       : 1
 currency      : RUB
 balance_cents : 1000000
 balance       : 10000
-
+```
 
 ---
 
 ### 7. Выпуск карты
 
-   powershell
+```powershell
 $body = @{
   account_id = 1
 } | ConvertTo-Json
@@ -380,35 +384,35 @@ $body = @{
 Invoke-RestMethod `
   -Method POST `
   -Uri "http://localhost:8080/cards" `
-  -Headers @ { Authorization = "Bearer $token"} `
+  -Headers @{ Authorization = "Bearer $token"} `
   -ContentType "application/json" `
   -Body $body
-
+```
 
 Результат:
 
-text
+```text
 id         : 1
 user_id    : 1
 account_id : 1
 last4      : 4075
 created_at : 2026-05-06T11:25:14.051218Z
-
+```
 
 ---
 
 ### 8. Просмотр карт
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/cards" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 id         : 1
 user_id    : 1
 account_id : 1
@@ -416,11 +420,11 @@ number     : 4000002552694075
 expiry     : 05/29
 last4      : 4075
 created_at : 2026-05-06T11:25:14.051218Z
-
+```
 
 Карта была успешно сохранена и прочитана из БД.  
 Номер и срок карты хранятся в зашифрованном виде через `pgcrypto`.  
-CVV хранится как bcrypt-хеш.
+CVV хранится как bcrypt-хеш.  
 При чтении карты выполняется HMAC-проверка целостности расшифрованных карточных данных.
 
 ---
@@ -429,7 +433,7 @@ CVV хранится как bcrypt-хеш.
 
 Оплата картой на `700` рублей:
 
-   powershell
+```powershell
 $body = @{
   amount = 700
 } | ConvertTo-Json
@@ -440,25 +444,25 @@ Invoke-RestMethod `
   -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body $body
-
+```
 
 Результат:
 
-   text
+```text
 id            : 1
 user_id       : 1
 currency      : RUB
 balance_cents : 930000
 balance       : 9300
-
+```
 
 Проверка расчёта:
 
-   text
+```text
 баланс до оплаты:    10000
 сумма оплаты:          700
 баланс после оплаты:  9300
-
+```
 
 При оплате картой выполняются:
 
@@ -474,63 +478,64 @@ balance       : 9300
 
 ### 9. Аналитика после пополнения
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/analytics" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 month_income_cents  : 1000000
 month_income        : 10000
 month_expense_cents : 0
 month_expense       : 0
 credit_load_cents   : 0
 credit_load         : 0
+```
+
 ---
 
 ### 9.1. Аналитика после оплаты картой
 
 После оплаты картой на `700` рублей аналитика показывает расход:
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/analytics" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 month_income_cents  : 1000000
 month_income        : 10000
 month_expense_cents : 70000
 month_expense       : 700
 credit_load_cents   : 0
 credit_load         : 0
-
+```
 
 Оплата картой корректно учитывается как расход.
-
 
 ---
 
 ### 10. Прогноз баланса до кредита
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/accounts/1/predict?days=30" `
   -Headers @{ Authorization = "Bearer $token" }
- 
+```
 
 Результат:
 
-   text
+```text
 account_id            : 1
 days                  : 30
 current_balance_cents : 1000000
@@ -539,28 +544,28 @@ planned_debits_cents  : 0
 planned_debits        : 0
 predicted_cents       : 1000000
 predicted             : 10000
-
+```
 
 ---
 
 ### 11. Создание второго счёта
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method POST `
   -Uri "http://localhost:8080/accounts" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 id            : 2
 user_id       : 1
 currency      : RUB
 balance_cents : 0
 balance       : 0
-
+```
 
 ---
 
@@ -568,7 +573,7 @@ balance       : 0
 
 Перевод `1500` рублей со счёта `1` на счёт `2`.
 
-   powershell
+```powershell
 $body = @{
   from_account_id = 1
   to_account_id = 2
@@ -581,53 +586,53 @@ Invoke-RestMethod `
   -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body $body
-
+```
 
 Результат:
 
-   text
+```text
 status : ok
-
+```
 
 ---
 
 ### 13. Проверка балансов после перевода
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/accounts" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 account 1 balance: 8500
 account 2 balance: 1500
-
+```
 
 ---
 
 ### 14. Аналитика после перевода
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/analytics" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-  text
+```text
 month_income_cents  : 1150000
 month_income        : 11500
 month_expense_cents : 150000
 month_expense       : 1500
 credit_load_cents   : 0
 credit_load         : 0
-
+```
 
 ---
 
@@ -635,7 +640,7 @@ credit_load         : 0
 
 Оформление кредита на `5000` рублей на срок `6` месяцев.
 
-powershell
+```powershell
 $body = @{
   account_id = 1
   amount = 5000
@@ -648,11 +653,11 @@ Invoke-RestMethod `
   -Headers @{ Authorization = "Bearer $token" } `
   -ContentType "application/json" `
   -Body $body
-
+```
 
 Результат:
 
-   text
+```text
 id                    : 1
 user_id               : 1
 account_id            : 1
@@ -672,16 +677,16 @@ status                : active
 
 ### 16. График платежей по кредиту
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/credits/1/schedule" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 id            : 1
 credit_id     : 1
 account_id    : 1
@@ -749,42 +754,42 @@ status        : pending
 
 После оформления кредита баланс счёта `1` увеличился:
 
-   text
+```text
 до кредита:     8500
 сумма кредита:  5000
 после кредита: 13500
-
+```
 
 Проверка:
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/accounts" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 account 1 balance: 13500
 account 2 balance: 1500
-
+```
 
 ---
 
 ### 18. Прогноз баланса после кредита
 
-   powershell
+```powershell
 Invoke-RestMethod `
   -Method GET `
   -Uri "http://localhost:8080/accounts/1/predict?days=60" `
   -Headers @{ Authorization = "Bearer $token" }
-
+```
 
 Результат:
 
-   text
+```text
 account_id            : 1
 days                  : 60
 current_balance_cents : 1350000
@@ -793,7 +798,7 @@ planned_debits_cents  : 88137
 planned_debits        : 881,37
 predicted_cents       : 1261863
 predicted             : 12618,63
-
+```
 
 Прогноз учитывает ближайший платёж по кредиту.
 
@@ -803,16 +808,16 @@ predicted             : 12618,63
 
 Перед сдачей были выполнены команды:
 
-   powershell
+```powershell
 go fmt ./...
 go test ./...
 go vet ./...
 go build ./cmd/api
-
+```
 
 Результат тестов:
 
-   text
+```text
 ?       bank-api/cmd/api              [no test files]
 ?       bank-api/internal/config      [no test files]
 ?       bank-api/internal/db          [no test files]
@@ -822,24 +827,42 @@ go build ./cmd/api
 ?       bank-api/internal/scheduler   [no test files]
 ok      bank-api/internal/security
 ok      bank-api/internal/service
-
+```
 
 Команда:
 
-   powershell
+```powershell
 go vet ./...
-
+```
 
 прошла без ошибок.
 
 Команда:
 
-   powershell
+```powershell
 go build ./cmd/api
-
+```
 
 прошла успешно.  
 После сборки появился файл `api.exe`.
+
+После добавления оплаты картой финальная проверка также прошла успешно:
+
+```powershell
+go fmt ./...
+go test ./...
+go vet ./...
+go build ./cmd/api
+```
+
+Результат:
+
+```text
+go fmt ./...       успешно
+go test ./...      успешно
+go vet ./...       успешно
+go build ./cmd/api успешно
+```
 
 ---
 
@@ -847,10 +870,10 @@ go build ./cmd/api
 
 Для полного пересоздания базы:
 
-   powershell
+```powershell
 docker compose down -v
 docker compose up -d
-
+```
 
 Эта команда удаляет volume PostgreSQL и заново применяет миграции из папки `migrations`.
 
@@ -863,7 +886,7 @@ docker compose up -d
 - пароли пользователей хешируются через bcrypt;
 - CVV карты хешируется через bcrypt;
 - номер карты и срок действия шифруются через PostgreSQL `pgcrypto`;
-- HMAC-SHA256 используется для контроля целостности карточных данных при чтении карты и при  оплате картой;
+- HMAC-SHA256 используется для контроля целостности карточных данных при чтении карты и при оплате картой;
 - авторизация защищённых эндпоинтов выполняется через JWT;
 - JWT-секрет хранится в переменной окружения;
 - SQL-запросы параметризованы;
@@ -871,7 +894,3 @@ docker compose up -d
 - оплата картой доступна только владельцу карты;
 - при оплате картой проверяется баланс связанного счёта;
 - операции оплаты картой сохраняются в истории транзакций как `card_payment`.
-
-
-## Команды для отправки на GitHub
-
